@@ -8,24 +8,52 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib import colors
 
-st.set_page_config(page_title="DELUX COURIER SERVICES - Enterprise Portal", layout="wide", page_icon="🚚")
+# ---------------------------------------------------------
+# ૧. PAGE CONFIG & INFOSOFT CLASSIC THEME STYLING
+# ---------------------------------------------------------
+st.set_page_config(
+    page_title="DELUX COURIER SERVICES - Online Courier Management System", 
+    layout="wide", 
+    page_icon="🚚"
+)
 
 st.markdown("""
 <style>
-    .delux-header {
-        background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
-        padding: 18px;
-        border-radius: 10px;
-        color: white;
-        text-align: center;
-        margin-bottom: 20px;
+    /* Classic Dark Background matching InfoSoft UI */
+    .stApp {
+        background-color: #241a19;
+        color: #ffffff;
     }
-    .delux-logo-text { font-size: 30px; font-weight: 800; color: #00FF87; }
-    .quick-bar { background-color: #1e293b; padding: 10px; border-radius: 8px; color: #f8fafc; border-left: 5px solid #10b981; margin-bottom: 15px; }
-    .stButton>button { background: linear-gradient(90deg, #059669 0%, #10b981 100%); color: white; font-weight: bold; border-radius: 6px; }
+    .company-title {
+        font-size: 26px;
+        font-weight: 800;
+        color: #FF6600;
+        font-family: Arial, Helvetica, sans-serif;
+        text-align: center;
+        margin-bottom: 10px;
+    }
+    .info-box {
+        background-color: #1e293b;
+        padding: 12px;
+        border-radius: 8px;
+        border-left: 4px solid #00FF87;
+        margin-bottom: 15px;
+        font-family: Tahoma;
+        font-size: 14px;
+        color: #ffffff;
+    }
+    .stButton>button {
+        background: linear-gradient(90deg, #059669 0%, #10b981 100%);
+        color: white;
+        font-weight: bold;
+        border-radius: 6px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
+# ---------------------------------------------------------
+# ૨. SUPABASE CONNECTIVITY
+# ---------------------------------------------------------
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_KEY = st.secrets.get("SUPABASE_KEY", "")
 
@@ -42,39 +70,50 @@ if "logged_in" not in st.session_state:
     st.session_state.branch_name = None
     st.session_state.branch_id = None
 
-st.markdown("""
-<div class="delux-header">
-    <div class="delux-logo-text">⚡ DELUX COURIER SERVICES</div>
-    <div style="color: #60EFFF; font-size: 13px;">Express Cargo & Parcel Logistics Network | InfoSoft Modular Interface</div>
-</div>
-""", unsafe_allow_html=True)
+# ---------------------------------------------------------
+# ૩. PDF UTILITIES FOR RECEIPTS & DRS
+# ---------------------------------------------------------
+def generate_receipt_pdf(awb, mode, sender, receiver, dest, weight, amount):
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=(300, 400), rightMargin=10, leftMargin=10, topMargin=10, bottomMargin=10)
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph("<b>DELUX COURIER SERVICES</b>", styles['Title']),
+        Paragraph(f"<b>Booking Type: {mode}</b>", styles['Normal']),
+        Spacer(1, 5),
+        Paragraph(f"<b>AWB NO: {awb}</b>", styles['Heading2']),
+        Spacer(1, 10)
+    ]
+    data = [
+        ["Sender:", sender],
+        ["Receiver:", receiver],
+        ["Destination:", dest],
+        ["Weight:", str(weight)],
+        ["Amount:", f"INR {amount}"]
+    ]
+    t = Table(data, colWidths=[80, 190])
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,-1), colors.whitesmoke),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
+        ('FONTNAME', (0,0), (-1,-1), 'Helvetica-Bold'),
+        ('FONTSIZE', (0,0), (-1,-1), 9),
+    ]))
+    story.append(t)
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
-def render_public_tracking():
-    st.subheader("🔍 Document / Consignment Tracking")
-    search_awb = st.text_input("Enter Document Number:", placeholder="ઉદા. 1477307197")
-    if st.button("Track Document"):
-        if search_awb:
-            res = supabase.table("consignments").select("*").eq("awb_number", search_awb).execute()
-            if res.data:
-                item = res.data[0]
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("AWB Number", item["awb_number"])
-                c2.metric("Destination", item["destination_city"])
-                c3.metric("Status", item["status"])
-                c4.metric("Mode", item.get("payment_mode", "Cash"))
-                st.success(f"📍 **Receiver:** {item['receiver_name']} | **Address:** {item['receiver_address']} | **Phone:** {item['receiver_phone']}")
-            else:
-                st.error("❌ No record found.")
-        else:
-            st.warning("Please enter AWB number.")
-
+# ---------------------------------------------------------
+# ૪. LOGIN & MAIN INTERFACE
+# ---------------------------------------------------------
 if not st.session_state.logged_in:
-    c1, c2 = st.columns([1, 1.2])
+    st.markdown('<div class="company-title">⚡ DELUX COURIER SERVICES (P) LTD.</div>', unsafe_allow_html=True)
+    c1, c2 = st.columns([1, 1])
     with c1:
         st.subheader("🔐 System Login")
-        b_code = st.text_input("User ID / Branch Code", placeholder="HO001")
+        b_code = st.text_input("User ID / Branch Code", placeholder="ઉદા. HO001 અથવા CHITRA")
         pwd = st.text_input("Password", type="password")
-        if st.button("Login"):
+        if st.button("Login To System"):
             res = supabase.table("branches").select("*").eq("branch_code", b_code).execute()
             if res.data:
                 user = res.data[0]
@@ -85,153 +124,183 @@ if not st.session_state.logged_in:
                 st.session_state.branch_id = user["id"]
                 st.rerun()
             else:
-                st.error("Invalid Branch Code!")
+                st.error("❌ ખોટો બ્રાન્ચ કોડ અથવા વિગતો!")
     with c2:
-        render_public_tracking()
+        st.subheader("🔍 Public Document Tracking")
+        track_no = st.text_input("Enter Document Number for Quick Track")
+        if st.button("Track Now"):
+            if track_no:
+                t_res = supabase.table("consignments").select("*").eq("awb_number", track_no).execute()
+                if t_res.data:
+                    item = t_res.data[0]
+                    st.success(f"📍 Status: {item['status']} | Dest: {item['destination_city']} | Receiver: {item['receiver_name']}")
+                else:
+                    st.warning("No record found.")
 else:
+    # Top Header & Info Box matching InfoSoft HTML layout
     st.markdown(f"""
-    <div class="quick-bar">
-        🟢 <b>Current Center:</b> {st.session_state.branch_name} ({st.session_state.branch_code}) | 
-        🛡️ <b>Role:</b> {st.session_state.role.upper()}
+    <div class="company-title">SHREE DELUX COURIER SERVICES (P) LTD.</div>
+    <div class="info-box">
+        <b>Wel Come:</b> {st.session_state.branch_name} ({st.session_state.branch_code}) &nbsp;|&nbsp; 
+        <b>Acc. Year:</b> 2025-2026 &nbsp;|&nbsp; 
+        <b>Date Period:</b> From 01/04/2025 To 31/03/2026 &nbsp;|&nbsp; 
+        <b>Role:</b> {st.session_state.role.upper()}
     </div>
     """, unsafe_allow_html=True)
-    
-    if st.sidebar.button("🚪 Logout"):
+
+    if st.sidebar.button("🚪 LOG OFF"):
         st.session_state.logged_in = False
         st.rerun()
 
-    # MAIN NAVIGATION (InfoSoft Style Menu Hierarchy)
-    main_menu = st.sidebar.radio("Navigation", [
-        "📦 Transactions (Booking)",
-        "📜 D.R.S. & Packing Slip",
-        "⚙️ Master Entries",
-        "🔎 Track Document"
+    # SIDEBAR MENU (InfoSoft Style Navigation)
+    menu = st.sidebar.radio("📋 Quick Operations Menu", [
+        "🏠 Dashboard / Home",
+        "📦 Cash Booking Entry",
+        "📊 Party Account Booking",
+        "📑 ManiFax Incoming / Outgoing",
+        "📜 DRS Voucher Entry",
+        "📥 Incoming Packing Slip",
+        "⚙️ Master Entries (Branch/Area/Boys)",
+        "🔎 Document Tracking"
     ])
 
-    if main_menu == "📦 Transactions (Booking)":
-        sub_t = st.sidebar.selectbox("Transaction Type", ["Cash Booking Entry", "Account Booking Entry"])
-        if sub_t == "Cash Booking Entry":
-            st.subheader("📦 Cash Booking Entry & Receipt Print")
-            with st.form("cash_booking"):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    awb = st.text_input("Document / Barcode Number")
-                    sender_name = st.text_input("Sender Name")
-                with c2:
-                    dest_city = st.text_input("Destination City")
-                    receiver_name = st.text_input("Receiver Name")
-                    receiver_addr = st.text_area("Receiver Address")
-                with c3:
-                    weight = st.number_input("Weight (Kg)", value=0.5)
-                    freight = st.number_input("Freight Amount (₹)", value=100.0)
-                
-                if st.form_submit_button("💾 Save Cash Booking"):
+    if menu == "🏠 Dashboard / Home":
+        st.subheader("📊 Booking Summary & Quick Actions")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Current Center", st.session_state.branch_name)
+        c2.metric("System Date", pd.Timestamp.now().strftime('%d/%m/%Y'))
+        c3.metric("Active Status", "Online")
+        
+        st.info("💡 ડાબી બાજુના મેનુમાંથી તમે કેશ બુકિંગ, એકાઉન્ટ બુકિંગ, મેનિફેસ્ટ અને ડી.આર.એસ. ની એન્ટ્રીઓ કરી શકો છો.")
+
+    elif menu == "📦 Cash Booking Entry":
+        st.subheader("📦 DOCUMENT TRANSIT BOOKING RECEIPT ENTRY (Cash Transaction)")
+        if "last_cash_awb" not in st.session_state:
+            st.session_state.last_cash_awb = None
+            st.session_state.last_cash_data = None
+
+        with st.form("cash_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                awb = st.text_input("Document / Barcode Number", placeholder="1477307197")
+                sender = st.text_input("Sender Name")
+                sender_mob = st.text_input("Sender Mobile")
+            with col2:
+                dest = st.text_input("Destination City / Area", placeholder="Ahmedabad")
+                receiver = st.text_input("Receiver Name")
+                receiver_mob = st.text_input("Receiver Mobile")
+                receiver_addr = st.text_area("Receiver Full Address")
+            with col3:
+                weight = st.number_input("Weight (Gms/Kg)", value=100.0)
+                pieces = st.number_input("No. of Pcs", value=1)
+                freight = st.number_input("Freight Amount (₹)", value=100.0)
+                net = freight + (freight * 0.18)
+                st.metric("Net Booking Amount", f"₹ {net:.2f}")
+
+            if st.form_submit_button("💾 SAVE CASH BOOKING"):
+                if awb and dest:
                     supabase.table("consignments").insert({
                         "awb_number": awb, "origin_branch_id": st.session_state.branch_id,
-                        "destination_city": dest_city, "sender_name": sender_name,
-                        "receiver_name": receiver_name, "receiver_address": receiver_addr,
-                        "weight_kg": weight, "charge_amount": freight,
+                        "destination_city": dest, "sender_name": sender, "sender_phone": sender_mob,
+                        "receiver_name": receiver, "receiver_address": receiver_addr, "receiver_phone": receiver_mob,
+                        "weight_kg": weight, "pieces": pieces, "charge_amount": net,
                         "payment_mode": "Cash", "status": "In Transit"
                     }).execute()
-                    st.success(f"✅ Cash Booking Saved! AWB: {awb}")
-        else:
-            st.subheader("📊 Account Booking Entry")
-            with st.form("acc_booking"):
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    party = st.selectbox("Party Account Name", ["Corporate Party A", "Corporate Party B"])
-                    awb = st.text_input("AWB Number")
-                with c2:
-                    dest = st.text_input("Destination City")
-                    rec_name = st.text_input("Receiver Name")
-                with c3:
-                    weight = st.number_input("Weight (Kg)", value=1.0)
-                    freight = st.number_input("Freight Amount (₹)", value=150.0)
+                    st.session_state.last_cash_awb = awb
+                    st.session_state.last_cash_data = (sender, receiver, dest, weight, net)
+                    st.success(f"✅ Cash Booking Saved Successfully! AWB: {awb}")
+                else:
+                    st.error("AWB Number અને Destination City ફરજિયાત છે.")
 
-                if st.form_submit_button("💾 Save Account Booking"):
+        if st.session_state.last_cash_awb:
+            pdf = generate_receipt_pdf(
+                st.session_state.last_cash_awb, "Cash",
+                st.session_state.last_cash_data[0], st.session_state.last_cash_data[1],
+                st.session_state.last_cash_data[2], st.session_state.last_cash_data[3],
+                st.session_state.last_cash_data[4]
+            )
+            st.download_button("🖨️ Download Receipt PDF", pdf, f"Receipt_{st.session_state.last_cash_awb}.pdf", "application/pdf")
+
+    elif menu == "📊 Party Account Booking":
+        st.subheader("📊 DOCUMENT TRANSIT BOOKING RECEIPT ENTRY (Account Transaction)")
+        with st.form("acc_form"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                party = st.selectbox("Party Account Name", [".PAHAL FINANCIAL SERVICES", "00 KUMAR MINERAL", "CHITRA (SME) SBI", "KATARIA AUTOMOBILES"])
+                awb = st.text_input("Document / Barcode Number")
+                sender = st.text_input("Sender Name")
+            with col2:
+                dest = st.text_input("Destination City")
+                receiver = st.text_input("Receiver Name")
+                receiver_addr = st.text_area("Receiver Address")
+            with col3:
+                weight = st.number_input("Weight", value=100.0)
+                freight = st.number_input("Freight Amount (₹)", value=150.0)
+                st.metric("Account Billing Total", f"₹ {freight}")
+
+            if st.form_submit_button("💾 SAVE ACCOUNT BOOKING"):
+                if awb and dest:
                     supabase.table("consignments").insert({
                         "awb_number": awb, "origin_branch_id": st.session_state.branch_id,
-                        "destination_city": dest, "sender_name": f"{party}",
-                        "receiver_name": rec_name, "weight_kg": weight,
-                        "charge_amount": freight, "payment_mode": "Account", "status": "In Transit"
+                        "destination_city": dest, "sender_name": f"{party} - {sender}",
+                        "receiver_name": receiver, "receiver_address": receiver_addr,
+                        "weight_kg": weight, "charge_amount": freight,
+                        "payment_mode": "Account", "status": "In Transit"
                     }).execute()
-                    st.success(f"✅ Account Booking Saved for [{party}]!")
+                    st.success(f"✅ Account Booking Saved for [{party}]! AWB: {awb}")
 
-    elif main_menu == "📜 D.R.S. & Packing Slip":
-        sub_d = st.sidebar.selectbox("Select Utility", ["D.R.S. Entry", "Incoming Packing Slip"])
-        if sub_d == "D.R.S. Entry":
-            st.subheader("📜 D.R.S. [Delivery Run Sheet] Entry")
-            with st.form("drs_form"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    drs_no = st.text_input("D.R.S. Number", value="34118")
-                    delivery_boy = st.selectbox("Delivery Boy Master", ["Darshakbhai", "Jayveer", "Rameshbhai"])
-                with c2:
-                    drs_date = st.text_input("D.R.S. Date", value="09/11/2026")
-                    area_name = st.selectbox("Area Master (ARFA NAME)", ["Chitra GIDC", "Bhavnagar City", "Vartej Road"])
-                
-                if st.form_submit_button("Save DRS Entry"):
-                    st.success(f"✅ DRS [{drs_no}] saved for Delivery Boy [{delivery_boy}] in Area [{area_name}]!")
-        else:
-            st.subheader("📥 Incoming Packing Slip")
-            with st.form("inc_slip"):
-                c1, c2 = st.columns(2)
-                with c1:
-                    slip_no = st.text_input("Packing Slip No.", value="9789")
-                    slip_from = st.selectbox("Slip From (Center)", ["Ahmedabad Center", "Surat Center"])
-                with c2:
-                    transit_mode = st.selectbox("Transit Mode", ["BY ROAD", "BY AIR"])
-                    total_docs = st.number_input("Total Documents", value=1)
-                if st.form_submit_button("Save Incoming Slip"):
-                    st.success(f"✅ Packing Slip [{slip_no}] recorded successfully!")
-
-    elif main_menu == "⚙️ Master Entries":
-        st.subheader("⚙️ Master Entries Management [InfoSoft Style]")
-        master_opt = st.selectbox("Select Master Setup", [
-            "Center Master SetUp",
-            "Local Center SetUp",
-            "CENTER ADMIN User LogIN",
-            "User Master",
-            "AREA Master",
-            "Delivery Boy Master",
-            "General Account Master",
-            "Party Account Master",
-            "Party Account Rate Master",
-            "Cash Booking Rate Master",
-            "Bank Account SetUp"
-        ])
-
-        if master_opt in ["Center Master SetUp", "Local Center SetUp"]:
-            with st.markdown(f"### 🏭 {master_opt}"):
-                with st.form("center_form"):
-                    c_code = st.text_input("Center Code")
-                    c_name = st.text_input("Center Name")
-                    c_city = st.text_input("City")
-                    if st.form_submit_button("Save Center"):
-                        supabase.table("branches").insert({"branch_code": c_code, "branch_name": c_name, "city": c_city, "role": "branch"}).execute()
-                        st.success("Center saved successfully!")
-                res = supabase.table("branches").select("*").execute()
+    elif menu == "📑 ManiFax Incoming / Outgoing":
+        st.subheader("📑 ManiFax (Manifest) Management")
+        tab1, tab2 = st.tabs(["📥 Incoming ManiFax", "📤 Outgoing ManiFax"])
+        with tab1:
+            st.info("Incoming manifest control and parcel verification list.")
+        with tab2:
+            city_filter = st.text_input("Filter Outgoing ManiFax by City:")
+            if st.button("Generate Outgoing List"):
+                res = supabase.table("consignments").select("*").eq("destination_city", city_filter).execute()
                 if res.data:
                     st.dataframe(pd.DataFrame(res.data), use_container_width=True)
+                else:
+                    st.warning("કોઈ રેકોર્ડ મળ્યો નથી.")
 
-        elif master_opt == "AREA Master":
-            st.markdown("### 📍 AREA Master Setup")
-            with st.form("area_form"):
-                a_name = st.text_input("Area Name (ARFA NAME)")
-                a_pincode = st.text_input("Pincode")
-                if st.form_submit_button("Save Area"):
-                    st.success(f"Area [{a_name}] saved successfully!")
+    elif menu == "📜 DRS Voucher Entry":
+        st.subheader("📜 D.R.S. [Delivery Run Sheet] Voucher Entry")
+        with st.form("drs_entry"):
+            c1, c2 = st.columns(2)
+            with c1:
+                drs_no = st.text_input("D.R.S. Number", value="34118")
+                dboy = st.selectbox("Delivery Boy Name", ["Darshakbhai", "Jayveer", "Rameshbhai"])
+            with c2:
+                drs_date = st.text_input("D.R.S. Date", value="09/11/2026")
+                area = st.selectbox("Area Name (ARFA NAME)", ["Chitra GIDC", "Bhavnagar City", "Vartej Road"])
 
-        elif master_opt == "Delivery Boy Master":
-            st.markdown("### 🛵 Delivery Boy Master Setup")
-            with st.form("boy_form"):
-                b_name = st.text_input("Delivery Boy Name")
-                b_phone = st.text_input("Mobile Number")
-                if st.form_submit_button("Save Delivery Boy"):
-                    st.success(f"Delivery Boy [{b_name}] saved successfully!")
+            if st.form_submit_button("Save & Print DRS"):
+                st.success(f"✅ DRS [{drs_no}] generated for Delivery Boy [{dboy}] in Area [{area}]!")
 
-        else:
-            st.info(f"Configuration panel for **{master_opt}** is ready. Enter and manage master records here.")
+    elif menu == "📥 Incoming Packing Slip":
+        st.subheader("📥 INCOMING PACKING SLIP")
+        with st.form("pkng_slip"):
+            c1, c2 = st.columns(2)
+            with c1:
+                slip_no = st.text_input("Packing Slip No.", value="9789")
+                slip_from = st.selectbox("Slip From (Center)", ["Ahmedabad Center", "Surat Center"])
+            with c2:
+                transit = st.selectbox("Transit Mode", ["BY ROAD", "BY AIR"])
+                total_docs = st.number_input("Total Documents", value=1)
+            if st.form_submit_button("Save Packing Slip"):
+                st.success(f"✅ Packing Slip [{slip_no}] from [{slip_from}] saved successfully!")
 
-    elif main_menu == "🔎 Track Document":
-        render_public_tracking()
+    elif menu == "⚙️ Master Entries (Branch/Area/Boys)":
+        st.subheader("⚙️ Master Entries Management [InfoSoft Style]")
+        master_type = st.selectbox("Select Master", ["Center Master SetUp", "AREA Master", "Delivery Boy Master", "Party Account Master"])
+        st.info(f"Managing **{master_type}** records in Supabase database.")
+
+    elif menu == "🔎 Document Tracking":
+        st.subheader("🔍 Track Document / Consignment")
+        doc_no = st.text_input("Enter Document Number / AWB:")
+        if st.button("Search Document"):
+            res = supabase.table("consignments").select("*").eq("awb_number", doc_no).execute()
+            if res.data:
+                st.dataframe(pd.DataFrame(res.data), use_container_width=True)
+            else:
+                st.error("❌ Document not found.")
