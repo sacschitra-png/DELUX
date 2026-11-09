@@ -1,9 +1,6 @@
 import io
 import streamlit as st
 import pandas as pd
-import cv2
-from PIL import Image
-from pyzbar.pyzbar import decode
 from supabase import create_client, Client
 
 # PDF Generation Libraries (ReportLab)
@@ -84,7 +81,7 @@ def generate_runsheet_pdf(runsheet_id, branch, consignments):
             item.get("receiver_name", ""),
             item.get("receiver_address", ""),
             item.get("receiver_phone", ""),
-            ""  # Signature column
+            ""
         ])
 
     t = Table(table_data, colWidths=[100, 110, 180, 90, 70])
@@ -103,22 +100,7 @@ def generate_runsheet_pdf(runsheet_id, branch, consignments):
     return buffer
 
 # ---------------------------------------------------------
-# ૩. BARCODE SCANNER UTILITY
-# ---------------------------------------------------------
-def scan_barcode_from_camera():
-    """કેમેરા પિચર પરથી બારકોડ ડીકોડ કરવાનું ફંક્શન"""
-    img_file = st.camera_input("AWB સ્કેન કરવા માટે કેમેરા સામે બારકોડ રાખો")
-    if img_file is not None:
-        img = Image.open(img_file)
-        decoded_objs = decode(img)
-        for obj in decoded_objs:
-            barcode_data = obj.data.decode("utf-8")
-            st.success(f"✅ સ્કેન થયેલ AWB: **{barcode_data}**")
-            return barcode_data
-    return None
-
-# ---------------------------------------------------------
-# ૪. PUBLIC TRACKING PAGE
+# ૩. PUBLIC TRACKING PAGE
 # ---------------------------------------------------------
 def render_public_tracking():
     st.subheader("🔍 લાઈવ કન્સાઈનમેન્ટ ટ્રેકિંગ (Tracking Panel)")
@@ -142,7 +124,7 @@ def render_public_tracking():
             st.warning("કૃપા કરીને AWB નંબર દાખલ કરો.")
 
 # ---------------------------------------------------------
-# ૫. MAIN APP ROUTING & LOGIN
+# ૪. MAIN APP ROUTING & LOGIN
 # ---------------------------------------------------------
 st.sidebar.title("📦 Courier Portal")
 
@@ -153,7 +135,7 @@ if not st.session_state.logged_in:
         render_public_tracking()
     else:
         st.title("🔐 કુરિયર સોફ્ટવેર પોર્ટલ લોગિન")
-        b_code = st.text_input("Branch Code (ઉદાહરણ: HO001 / BR_BHAVNAGAR)")
+        b_code = st.text_input("Branch Code (ઉદાహરણ: HO001)")
         pwd = st.text_input("Password", type="password")
         
         if st.button("Login"):
@@ -180,7 +162,7 @@ else:
     # HEAD OFFICE (HO) DASHBOARD
     if st.session_state.role == "admin":
         st.title("👑 Head Office (HO) Control Center")
-        ho_tabs = st.tabs(["📊 ઓલ-ઓવર ટ્રાન્ઝિટ", "🏭 બ્રાન્ચ મેનેજમેન્ટ", "🔍 AWB સ્કેન & ચેક", "📄 રનશીટ જનરેશન"])
+        ho_tabs = st.tabs(["📊 ઓલ-ઓવર ટ્રાન્ઝિટ", "🏭 બ્રાન્ચ મેનેજમેન્ટ", "🔍 AWB ચેક", "📄 રનશીટ જનરેશન"])
 
         with ho_tabs[0]:
             st.subheader("તમામ બ્રાન્ચનું લાઈવ બુકિંગ રજિસ્ટર")
@@ -214,12 +196,10 @@ else:
                 st.success(f"બ્રાન્ચ {n_code} સફળતાપૂર્વક ઉમેરાઈ ગઈ!")
 
         with ho_tabs[2]:
-            st.subheader("📷 બારકોડ સ્કેનિંગ અને ક્વિક વિગત")
-            scanned_awb = scan_barcode_from_camera()
-            manual_awb = st.text_input("અથવા મેન્યુઅલ AWB ટાઈપ કરો:", value=scanned_awb if scanned_awb else "")
-            
-            if manual_awb:
-                data = supabase.table("consignments").select("*").eq("awb_number", manual_awb).execute()
+            st.subheader("🔎 AWB કન્સાઈનમેન્ટ તપાસો")
+            check_awb = st.text_input("AWB નંબર દાખલ કરો:")
+            if check_awb:
+                data = supabase.table("consignments").select("*").eq("awb_number", check_awb).execute()
                 if data.data:
                     st.json(data.data[0])
                 else:
